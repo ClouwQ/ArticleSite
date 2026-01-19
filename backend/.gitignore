@@ -1,0 +1,34 @@
+# Python and FastAPI related
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+
+# Environment
+.env
+.env.*
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# PyCharm
+.idea/
+
+# Uploads and user content
+uploads/
+
+# Migrations (if generated)
+*.log
+*.bak
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Ignore scripts outputs if any
+*.out
+*.tmp

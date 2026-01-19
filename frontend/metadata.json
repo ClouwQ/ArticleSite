@@ -1,0 +1,5 @@
+{
+  "name": "SSOTB - Content Platform",
+  "description": "A minimalist content platform featuring long-form markdown articles and curated music playlists with an iPod-style carousel interface.",
+  "requestFramePermissions": []
+}

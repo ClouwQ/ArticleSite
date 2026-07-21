@@ -20,7 +20,9 @@ from ..schemas.music_source import (
 from ..schemas.platform import PlatformCreate, PlatformRead, PlatformUpdate
 from ..schemas.playlist import PlaylistCreate, PlaylistRead, PlaylistUpdate
 from ..schemas.track import TrackCreate, TrackRead, TrackUpdate
+from ..services.archive_service import process_article_archive
 from ..services.file_service import save_cover_image, save_markdown_content, save_audio_file
+from ..services.slug_service import generate_unique_slug
 
 
 router = APIRouter(
@@ -39,6 +41,7 @@ async def admin_list_articles(db: Session = Depends(get_db)):
 @router.post("/articles", response_model=ArticleRead, status_code=status.HTTP_201_CREATED)
 async def admin_create_article(data: ArticleCreate, db: Session = Depends(get_db)):
     article = Article(**data.dict())
+    article.slug = generate_unique_slug(db, article.slug or article.title)
     db.add(article)
     db.commit()
     db.refresh(article)
@@ -61,7 +64,13 @@ async def admin_update_article(
     if not article:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
 
-    for key, value in data.dict(exclude_unset=True).items():
+    updates = data.dict(exclude_unset=True)
+    if "slug" in updates:
+        slug_value = updates.pop("slug")
+        article.slug = generate_unique_slug(
+            db, slug_value or updates.get("title") or article.title, exclude_id=article.id
+        )
+    for key, value in updates.items():
         setattr(article, key, value)
 
     db.commit()
@@ -142,6 +151,33 @@ async def upload_article_content(
         )
 
     path = save_markdown_content(article_id, file)
+    article.content_markdown_path = path
+    db.commit()
+    db.refresh(article)
+    return article
+
+
+@router.post("/articles/{article_id}/archive", response_model=ArticleRead)
+async def upload_article_archive(
+    article_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file type. Only a .zip archive is allowed.",
+        )
+
+    try:
+        path = process_article_archive(article_id, file)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     article.content_markdown_path = path
     db.commit()
     db.refresh(article)

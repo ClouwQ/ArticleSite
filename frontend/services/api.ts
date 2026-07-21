@@ -132,6 +132,21 @@ export const api = {
       }).then(handleJson<Article>);
     },
 
+    // Upload a .zip archive (Obsidian export): one .md file + its images.
+    uploadArticleArchive: (
+      token: string,
+      id: string,
+      file: File,
+    ): Promise<Article> => {
+      const form = new FormData();
+      form.append('file', file);
+      return fetch(`${API_BASE_URL}/api/admin/articles/${id}/archive`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: form,
+      }).then(handleJson<Article>);
+    },
+
     // Playlists
     getPlaylists: (token: string): Promise<Playlist[]> =>
       fetch(`${API_BASE_URL}/api/admin/playlists`, {

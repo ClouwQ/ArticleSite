@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
     server: {
-      port: 3000,
+      port: 9010,
       host: '0.0.0.0',
       hmr: {
         host: 'localhost',
@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
         '.ngrok.io',
         '127.0.0.1',
         '0.0.0.0',
+        '94.29.33.8',
       ],
       fs: {
         allow: ['..', '.'],

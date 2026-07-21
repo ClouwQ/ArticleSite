@@ -13,6 +13,17 @@ from ..services.file_service import read_markdown_content
 router = APIRouter(prefix="/api", tags=["articles"])
 
 
+def _find_published_article(db: Session, key: str) -> Article | None:
+    """Resolve an article by id first, then by slug."""
+
+    article = db.query(Article).filter(Article.id == key).first()
+    if not article:
+        article = db.query(Article).filter(Article.slug == key).first()
+    if not article or not article.is_published:
+        return None
+    return article
+
+
 @router.get("/articles", response_model=List[ArticleRead])
 async def list_published_articles(db: Session = Depends(get_db)):
     return (
@@ -25,8 +36,8 @@ async def list_published_articles(db: Session = Depends(get_db)):
 
 @router.get("/articles/{article_id}", response_model=ArticleRead)
 async def get_article(article_id: str, db: Session = Depends(get_db)):
-    article = db.query(Article).filter(Article.id == article_id).first()
-    if not article or not article.is_published:
+    article = _find_published_article(db, article_id)
+    if not article:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
     return article
 
@@ -35,8 +46,8 @@ async def get_article(article_id: str, db: Session = Depends(get_db)):
     "/articles/{article_id}/content", response_class=PlainTextResponse
 )
 async def get_article_content(article_id: str, db: Session = Depends(get_db)):
-    article = db.query(Article).filter(Article.id == article_id).first()
-    if not article or not article.is_published:
+    article = _find_published_article(db, article_id)
+    if not article:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
 
     if not article.content_markdown_path:

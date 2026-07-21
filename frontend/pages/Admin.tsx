@@ -2,43 +2,90 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Article, Playlist, Track, Platform, MusicSource } from '../types';
 import { LogOut, FileText, Music, Disc, List } from '../components/Icons';
+import { DEFAULT_BG, DEFAULT_TEXT, DEFAULT_ACCENT } from '../lib/article';
+
+const inputCls =
+  'w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-accent focus:border-transparent outline-none text-sm';
+
+const ColorField: React.FC<{
+  label: string;
+  value: string;
+  useDefault: boolean;
+  defaultValue: string;
+  onValue: (v: string) => void;
+  onUseDefault: (b: boolean) => void;
+}> = ({ label, value, useDefault, defaultValue, onValue, onUseDefault }) => {
+  const shown = useDefault ? defaultValue : value;
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={shown}
+          disabled={useDefault}
+          onChange={(e) => onValue(e.target.value)}
+          className="h-9 w-12 border border-gray-300 rounded disabled:opacity-50 p-0.5"
+        />
+        <input
+          type="text"
+          value={shown}
+          disabled={useDefault}
+          onChange={(e) => onValue(e.target.value)}
+          className="w-24 px-2 py-1 border border-gray-300 rounded text-sm disabled:opacity-50"
+        />
+        <label className="flex items-center gap-1 text-xs text-gray-600 select-none">
+          <input
+            type="checkbox"
+            checked={useDefault}
+            onChange={(e) => onUseDefault(e.target.checked)}
+          />
+          по умолчанию
+        </label>
+      </div>
+    </div>
+  );
+};
 
 // Subcomponents for the dashboard
 const ArticlesList = () => {
   const [articles, setArticles] = useState<Article[]>([]);
-  const [showNewModal, setShowNewModal] = useState(false);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [mode, setMode] = useState<null | 'new' | 'edit'>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [title, setTitle] = useState('');
+  const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
-  const [isPublished, setIsPublished] = useState(true);
+  const [tag, setTag] = useState('');
+  const [playlistId, setPlaylistId] = useState('');
+  const [published, setPublished] = useState(true);
+
+  const [bgColor, setBgColor] = useState(DEFAULT_BG);
+  const [bgDefault, setBgDefault] = useState(true);
+  const [textColor, setTextColor] = useState(DEFAULT_TEXT);
+  const [textDefault, setTextDefault] = useState(true);
+  const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT);
+  const [accentDefault, setAccentDefault] = useState(true);
+
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [archiveFile, setArchiveFile] = useState<File | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editing, setEditing] = useState<Article | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editPublished, setEditPublished] = useState(true);
-  const [editPlaylistId, setEditPlaylistId] = useState<string>('');
-  const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
-  const [editContentFile, setEditContentFile] = useState<File | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const loadArticles = () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    api.admin
-      .getArticles(token)
-      .then(setArticles)
-      .catch(console.error);
-  };
+  const token = () => localStorage.getItem('token');
 
+  const loadArticles = () => {
+    const t = token();
+    if (!t) return;
+    api.admin.getArticles(t).then(setArticles).catch(console.error);
+  };
   const loadPlaylists = () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    api.admin
-      .getPlaylists(token)
-      .then(setPlaylists)
-      .catch(console.error);
+    const t = token();
+    if (!t) return;
+    api.admin.getPlaylists(t).then(setPlaylists).catch(console.error);
   };
 
   useEffect(() => {
@@ -46,89 +93,110 @@ const ArticlesList = () => {
     loadPlaylists();
   }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
+  const resetForm = () => {
+    setTitle('');
+    setSlug('');
+    setDescription('');
+    setTag('');
+    setPlaylistId('');
+    setPublished(true);
+    setBgColor(DEFAULT_BG);
+    setBgDefault(true);
+    setTextColor(DEFAULT_TEXT);
+    setTextDefault(true);
+    setAccentColor(DEFAULT_ACCENT);
+    setAccentDefault(true);
+    setCoverFile(null);
+    setArchiveFile(null);
     setError('');
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('No auth token');
-        return;
-      }
-      await api.admin.createArticle(token, {
-        title,
-        description,
-        is_published: isPublished,
-      } as Partial<Article>);
-      setTitle('');
-      setDescription('');
-      setIsPublished(true);
-      setShowNewModal(false);
-      loadArticles();
-    } catch (err) {
-      setError('Failed to create article');
-      console.error(err);
-    } finally {
-      setSaving(false);
-    }
+  };
+
+  const openNew = () => {
+    resetForm();
+    setEditingId(null);
+    setMode('new');
   };
 
   const openEdit = (a: Article) => {
-    setEditing(a);
-    setEditTitle(a.title || '');
-    setEditDescription(a.description || '');
-    setEditPublished(!!a.is_published);
-    setEditPlaylistId(a.playlist_id || '');
-    setEditCoverFile(null);
-    setEditContentFile(null);
+    setEditingId(a.id);
+    setTitle(a.title || '');
+    setSlug(a.slug || '');
+    setDescription(a.description || '');
+    setTag(a.tag || '');
+    setPlaylistId(a.playlist_id || '');
+    setPublished(!!a.is_published);
+    setBgDefault(!a.bg_color);
+    setBgColor(a.bg_color || DEFAULT_BG);
+    setTextDefault(!a.text_color);
+    setTextColor(a.text_color || DEFAULT_TEXT);
+    setAccentDefault(!a.photo_accent_color);
+    setAccentColor(a.photo_accent_color || DEFAULT_ACCENT);
+    setCoverFile(null);
+    setArchiveFile(null);
     setError('');
-    setShowEditModal(true);
+    setMode('edit');
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  const close = () => {
+    setMode(null);
+    setEditingId(null);
+  };
+
+  const buildPayload = (): Partial<Article> => ({
+    title,
+    description: description || null,
+    tag: tag.trim() || null,
+    playlist_id: playlistId || null,
+    is_published: published,
+    bg_color: bgDefault ? null : bgColor,
+    text_color: textDefault ? null : textColor,
+    photo_accent_color: accentDefault ? null : accentColor,
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editing) return;
+    const t = token();
+    if (!t) {
+      setError('No auth token');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('No auth token');
-        return;
+      const slugPart = slug.trim() ? { slug: slug.trim() } : {};
+      let articleId = editingId;
+      if (mode === 'new') {
+        const created = await api.admin.createArticle(t, {
+          ...buildPayload(),
+          ...slugPart,
+        } as Partial<Article>);
+        articleId = created.id;
+      } else if (editingId) {
+        await api.admin.updateArticle(t, editingId, {
+          ...buildPayload(),
+          ...slugPart,
+        } as Partial<Article>);
       }
-
-      const updated = await api.admin.updateArticle(token, editing.id, {
-        title: editTitle,
-        description: editDescription,
-        is_published: editPublished,
-        playlist_id: editPlaylistId || null,
-      } as Partial<Article>);
-
-      if (editCoverFile) {
-        await api.admin.uploadArticleCover(token, updated.id, editCoverFile);
+      if (articleId) {
+        if (coverFile) await api.admin.uploadArticleCover(t, articleId, coverFile);
+        if (archiveFile) await api.admin.uploadArticleArchive(t, articleId, archiveFile);
       }
-      if (editContentFile) {
-        await api.admin.uploadArticleContent(token, updated.id, editContentFile);
-      }
-
-      setShowEditModal(false);
-      setEditing(null);
+      close();
       loadArticles();
     } catch (err) {
-      setError('Failed to update article');
       console.error(err);
+      setError('Не удалось сохранить статью');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    const t = token();
+    if (!t) return;
     setDeletingId(id);
     try {
-      await api.admin.deleteArticle(token, id);
+      await api.admin.deleteArticle(t, id);
       loadArticles();
     } catch (err) {
       console.error(err);
@@ -137,12 +205,14 @@ const ArticlesList = () => {
     }
   };
 
+  const editing = mode === 'edit' ? articles.find((a) => a.id === editingId) || null : null;
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Articles</h2>
         <button
-          onClick={() => setShowNewModal(true)}
+          onClick={openNew}
           className="bg-dark text-white px-4 py-2 rounded hover:bg-gray-800 text-sm"
         >
           New Article
@@ -153,22 +223,26 @@ const ArticlesList = () => {
           <thead className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500">
             <tr>
               <th className="p-4">Title</th>
+              <th className="p-4">Tag</th>
               <th className="p-4">Description</th>
               <th className="p-4">Created</th>
               <th className="p-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {articles.map(a => (
+            {articles.map((a) => (
               <tr key={a.id} className="hover:bg-gray-50">
-                <td className="p-4 font-medium">{a.title}</td>
-                <td className="p-4 text-gray-600">{a.description}</td>
+                <td className="p-4 font-medium">
+                  {a.title}
+                  {!a.is_published && (
+                    <span className="ml-2 text-[10px] uppercase text-gray-400">draft</span>
+                  )}
+                </td>
+                <td className="p-4 text-gray-600">{a.tag || '—'}</td>
+                <td className="p-4 text-gray-600 max-w-xs truncate">{a.description}</td>
                 <td className="p-4 text-gray-500">{new Date(a.created_at).toLocaleDateString()}</td>
                 <td className="p-4 text-right space-x-2">
-                  <button
-                    onClick={() => openEdit(a)}
-                    className="text-blue-600 text-sm hover:underline"
-                  >
+                  <button onClick={() => openEdit(a)} className="text-blue-600 text-sm hover:underline">
                     Edit
                   </button>
                   <button
@@ -185,88 +259,45 @@ const ArticlesList = () => {
         </table>
       </div>
 
-      {showNewModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-6">
-            <h3 className="text-lg font-semibold mb-4">New Article</h3>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-accent focus:border-transparent outline-none text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-accent focus:border-transparent outline-none text-sm"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  id="new-article-published"
-                  type="checkbox"
-                  checked={isPublished}
-                  onChange={(e) => setIsPublished(e.target.checked)}
-                  className="h-4 w-4 text-accent border-gray-300 rounded"
-                />
-                <label htmlFor="new-article-published" className="text-sm text-gray-700">
-                  Published
-                </label>
-              </div>
-              {error && <div className="text-sm text-red-500">{error}</div>}
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowNewModal(false)}
-                  className="px-3 py-2 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 text-sm rounded bg-dark text-white hover:bg-black disabled:opacity-50"
-                >
-                  {saving ? 'Saving...' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showEditModal && editing && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6">
-            <h3 className="text-lg font-semibold mb-4">Edit Article</h3>
-            <form onSubmit={handleUpdate} className="space-y-4">
+      {mode && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">
+              {mode === 'new' ? 'New Article' : 'Edit Article'}
+            </h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Заголовок *</label>
+                  <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} required className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
                   <input
                     type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-accent focus:border-transparent outline-none text-sm"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    placeholder="генерируется автоматически"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Тег</label>
+                  <input
+                    type="text"
+                    value={tag}
+                    onChange={(e) => setTag(e.target.value)}
+                    placeholder="по умолчанию: Статья"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Playlist</label>
-                  <select
-                    value={editPlaylistId}
-                    onChange={(e) => setEditPlaylistId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-accent focus:border-transparent outline-none text-sm"
-                  >
-                    <option value="">(none)</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Плейлист</label>
+                  <select value={playlistId} onChange={(e) => setPlaylistId(e.target.value)} className={inputCls}>
+                    <option value="">(нет)</option>
                     {playlists.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.title}
@@ -275,65 +306,96 @@ const ArticlesList = () => {
                   </select>
                 </div>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-accent focus:border-transparent outline-none text-sm"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Описание (description)</label>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={inputCls} />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-gray-100 pt-4">
+                <ColorField
+                  label="Цвет фона"
+                  value={bgColor}
+                  useDefault={bgDefault}
+                  defaultValue={DEFAULT_BG}
+                  onValue={setBgColor}
+                  onUseDefault={setBgDefault}
+                />
+                <ColorField
+                  label="Цвет текста"
+                  value={textColor}
+                  useDefault={textDefault}
+                  defaultValue={DEFAULT_TEXT}
+                  onValue={setTextColor}
+                  onUseDefault={setTextDefault}
+                />
+                <ColorField
+                  label="Цвет [Фото N]"
+                  value={accentColor}
+                  useDefault={accentDefault}
+                  defaultValue={DEFAULT_ACCENT}
+                  onValue={setAccentColor}
+                  onUseDefault={setAccentDefault}
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  id="edit-article-published"
-                  type="checkbox"
-                  checked={editPublished}
-                  onChange={(e) => setEditPublished(e.target.checked)}
-                  className="h-4 w-4 text-accent border-gray-300 rounded"
-                />
-                <label htmlFor="edit-article-published" className="text-sm text-gray-700">
-                  Published
-                </label>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cover image (JPG/PNG/WebP)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Обложка (JPG/PNG/WebP)</label>
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
-                    onChange={(e) => setEditCoverFile(e.target.files?.[0] || null)}
+                    onChange={(e) => setCoverFile(e.target.files?.[0] || null)}
                     className="w-full text-sm"
                   />
+                  {editing?.cover_image_path && !coverFile && (
+                    <p className="text-xs text-green-700 mt-1">обложка загружена</p>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Markdown (.md)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Текст статьи — архив .zip (.md + фото из Obsidian)
+                  </label>
                   <input
                     type="file"
-                    accept=".md,text/markdown"
-                    onChange={(e) => setEditContentFile(e.target.files?.[0] || null)}
+                    accept=".zip,application/zip"
+                    onChange={(e) => setArchiveFile(e.target.files?.[0] || null)}
                     className="w-full text-sm"
                   />
+                  {editing?.content_markdown_path && !archiveFile && (
+                    <p className="text-xs text-green-700 mt-1">текст загружен</p>
+                  )}
                 </div>
               </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="article-published"
+                  type="checkbox"
+                  checked={published}
+                  onChange={(e) => setPublished(e.target.checked)}
+                  className="h-4 w-4 text-accent border-gray-300 rounded"
+                />
+                <label htmlFor="article-published" className="text-sm text-gray-700">
+                  Опубликовать
+                </label>
+              </div>
+
               {error && <div className="text-sm text-red-500">{error}</div>}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditing(null);
-                  }}
+                  onClick={close}
                   className="px-3 py-2 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
                 >
-                  Close
+                  Отмена
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-2 text-sm rounded bg-dark text-white hover:bg-black disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'Сохранение...' : 'Сохранить'}
                 </button>
               </div>
             </form>
@@ -597,7 +659,7 @@ const MusicManager = () => {
                 <input
                   value={newPlaylistExternalUrl}
                   onChange={(e) => setNewPlaylistExternalUrl(e.target.value)}
-                  placeholder="External URL (optional)"
+                  placeholder="Ссылка на Яндекс Музыку (необязательно)"
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                 />
                 <button
@@ -629,7 +691,7 @@ const MusicManager = () => {
                     <input
                       value={editPlaylistExternalUrl}
                       onChange={(e) => setEditPlaylistExternalUrl(e.target.value)}
-                      placeholder="External URL"
+                      placeholder="Ссылка на Яндекс Музыку"
                       className="px-3 py-2 border border-gray-300 rounded text-sm"
                     />
                     <button

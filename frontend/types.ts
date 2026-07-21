@@ -1,11 +1,16 @@
 export interface Article {
   id: string;
+  slug: string | null;
   title: string;
   description: string | null;
+  tag: string | null;
   cover_image_path: string | null;
   content_markdown_path: string | null;
   playlist_id: string | null;
   is_published: boolean;
+  bg_color: string | null;
+  text_color: string | null;
+  photo_accent_color: string | null;
   created_at: string;
   updated_at: string;
 }
